@@ -73,7 +73,7 @@ function App() {
         </div>
       </nav>
 
-      <main className="flex flex-col items-center px-4 py-10 sm:py-16">
+      <main className="flex flex-col items-center px-4 py-10 sm:py-16 fade-in">
         {/* Address input */}
         {!isConnected && !viewAddress && (
           <div className="w-full max-w-[480px] mb-6">

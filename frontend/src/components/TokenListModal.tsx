@@ -29,44 +29,46 @@ export const TokenListModal = ({
   return (
     <Transition show={isOpen} as={Fragment}>
       <Dialog onClose={onClose} className="relative z-50">
+        {/* Backdrop */}
         <Transition.Child
           as={Fragment}
-          enter="ease-out duration-200"
+          enter="duration-300 ease-out"
           enterFrom="opacity-0"
           enterTo="opacity-100"
-          leave="ease-in duration-150"
+          leave="duration-200 ease-in"
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
-          <div className="fixed inset-0 bg-black/70" />
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" />
         </Transition.Child>
 
+        {/* Slide-in panel */}
         <div className="fixed inset-0 overflow-hidden">
           <div className="absolute inset-0 overflow-hidden">
             <div className="pointer-events-none fixed inset-y-0 right-0 flex max-w-full pl-10 sm:pl-16">
               <Transition.Child
                 as={Fragment}
-                enter="transform transition ease-in-out duration-300"
-                enterFrom="translate-x-full"
-                enterTo="translate-x-0"
-                leave="transform transition ease-in-out duration-200"
-                leaveFrom="translate-x-0"
-                leaveTo="translate-x-full"
+                enter="duration-500 ease-out"
+                enterFrom="translate-x-full opacity-0"
+                enterTo="translate-x-0 opacity-100"
+                leave="duration-300 ease-in"
+                leaveFrom="translate-x-0 opacity-100"
+                leaveTo="translate-x-full opacity-0"
               >
                 <Dialog.Panel className="pointer-events-auto w-screen max-w-md">
                   <div className="flex h-full flex-col bg-[#0a0a0a] border-l border-[#222]">
                     {/* Header */}
-                    <div className="px-5 py-4 border-b border-[#222]">
+                    <div className="px-5 py-4 border-b border-[#191919]">
                       <div className="flex items-center justify-between">
                         <Dialog.Title className="text-sm font-semibold text-white">
                           Select Tokens
                         </Dialog.Title>
                         <button
                           onClick={onClose}
-                          className="p-1 rounded text-[#666] hover:text-white transition-colors"
+                          className="p-1.5 rounded-md text-[#555] hover:text-white hover:bg-[#1a1a1a]"
                         >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                           </svg>
                         </button>
                       </div>
@@ -74,27 +76,27 @@ export const TokenListModal = ({
                       <div className="flex gap-1.5 mt-3">
                         <button
                           onClick={onSelectAll}
-                          className="px-2.5 py-1 bg-white text-black rounded text-[11px] font-medium hover:bg-[#ededed] transition-colors"
+                          className="px-3 py-1.5 bg-white text-black rounded-md text-[11px] font-medium hover:bg-[#ededed]"
                         >
                           Select All
                         </button>
                         <button
                           onClick={onDeselectAll}
-                          className="px-2.5 py-1 bg-[#1a1a1a] text-[#888] rounded text-[11px] font-medium hover:text-white hover:bg-[#222] transition-colors"
+                          className="px-3 py-1.5 bg-[#111] text-[#888] rounded-md text-[11px] font-medium hover:text-white hover:bg-[#1a1a1a]"
                         >
                           Clear
                         </button>
                         <button
                           onClick={onRefresh}
                           disabled={loading}
-                          className="px-2.5 py-1 bg-[#1a1a1a] text-[#888] rounded text-[11px] font-medium hover:text-white hover:bg-[#222] transition-colors disabled:opacity-40 ml-auto"
+                          className="px-3 py-1.5 bg-[#111] text-[#888] rounded-md text-[11px] font-medium hover:text-white hover:bg-[#1a1a1a] disabled:opacity-30 ml-auto"
                         >
                           Refresh
                         </button>
                       </div>
                     </div>
 
-                    {/* List */}
+                    {/* Content */}
                     <div className="flex-1 overflow-y-auto px-5 py-3">
                       <TokenList
                         tokens={tokens}
@@ -105,10 +107,10 @@ export const TokenListModal = ({
                     </div>
 
                     {/* Footer */}
-                    <div className="px-5 py-3 border-t border-[#222]">
+                    <div className="px-5 py-3 border-t border-[#191919]">
                       <button
                         onClick={onClose}
-                        className="w-full py-2.5 bg-white text-black font-medium rounded-lg hover:bg-[#ededed] transition-colors text-sm"
+                        className="w-full py-2.5 bg-white text-black font-medium rounded-lg hover:bg-[#ededed] text-sm"
                       >
                         Done ({selectedTokens.size} selected)
                       </button>

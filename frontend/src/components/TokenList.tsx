@@ -19,7 +19,7 @@ const RISK_DOT: Record<string, string> = {
 
 function Check({ label, safe }: { label: string; safe: boolean }) {
   return (
-    <div className="flex items-center gap-1 py-0.5">
+    <div className="flex items-center gap-1.5 py-0.5">
       <span className={`w-3 h-3 rounded-full flex items-center justify-center text-[8px] font-bold ${safe ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'}`}>
         {safe ? '\u2713' : '\u2717'}
       </span>
@@ -30,22 +30,22 @@ function Check({ label, safe }: { label: string; safe: boolean }) {
 
 function SecurityPanel({ security, tokenAddress }: { security: TokenSecurity; tokenAddress: string }) {
   return (
-    <div className="mt-1 bg-black/50 rounded-md border border-[#222] text-[11px] overflow-hidden">
-      <div className="px-2.5 py-1.5 border-b border-[#222] flex items-center justify-between">
-        <span className="font-medium text-white">Security</span>
-        <a href={`${BLOCK_EXPLORER_TOKEN_URL}/${tokenAddress}`} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-[10px] text-[#555] hover:text-white font-mono transition-colors">
+    <div className="expand-enter mt-1.5 bg-black/50 rounded-lg border border-[#222] text-[11px] overflow-hidden">
+      <div className="px-3 py-2 border-b border-[#222] flex items-center justify-between">
+        <span className="font-medium text-[#ededed] text-xs">Security Check</span>
+        <a href={`${BLOCK_EXPLORER_TOKEN_URL}/${tokenAddress}`} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-[10px] text-[#555] hover:text-white font-mono">
           {tokenAddress.slice(0, 6)}...{tokenAddress.slice(-4)}
         </a>
       </div>
-      <div className="grid grid-cols-2 divide-x divide-[#222]">
-        <div className="px-2.5 py-1.5">
+      <div className="grid grid-cols-2 divide-x divide-[#191919]">
+        <div className="px-3 py-2 space-y-0.5">
           <Check label="Not honeypot" safe={!security.isHoneypot} />
           <Check label="Can sell" safe={!security.cannotSellAll} />
           <Check label="No blacklist" safe={!security.isBlacklisted} />
           <Check label={`Buy tax ${(security.buyTax * 100).toFixed(0)}%`} safe={security.buyTax < 0.1} />
           <Check label={`Sell tax ${(security.sellTax * 100).toFixed(0)}%`} safe={security.sellTax < 0.1} />
         </div>
-        <div className="px-2.5 py-1.5">
+        <div className="px-3 py-2 space-y-0.5">
           <Check label="Verified source" safe={security.isOpenSource} />
           <Check label="No hidden owner" safe={!security.hiddenOwner} />
           <Check label="Safe ownership" safe={!security.canTakeBackOwnership} />
@@ -84,16 +84,16 @@ export const TokenList = ({ tokens, selectedTokens, onToggleToken, loading = fal
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center py-8">
+      <div className="flex flex-col items-center justify-center py-12">
         <div className="w-6 h-6 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-        <p className="mt-3 text-[#666] text-xs">Scanning wallet...</p>
+        <p className="mt-4 text-[#666] text-xs">Scanning wallet...</p>
       </div>
     );
   }
 
   if (tokens.length === 0) {
     return (
-      <div className="text-center py-8 text-[#666]">
+      <div className="text-center py-12 text-[#666]">
         <p className="text-sm">No dust tokens found</p>
       </div>
     );
@@ -101,16 +101,15 @@ export const TokenList = ({ tokens, selectedTokens, onToggleToken, loading = fal
 
   return (
     <div>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs text-[#666]">{tokens.length} tokens</span>
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-xs text-[#555]">{tokens.length} tokens</span>
         <div className="flex gap-1">
           {(['value', 'risk', 'balance'] as const).map((key) => (
             <button
               key={key}
               onClick={() => setSortBy(key)}
-              className={`px-2 py-0.5 rounded text-[10px] transition-colors ${
-                sortBy === key ? 'bg-white text-black' : 'bg-[#1a1a1a] text-[#666] hover:text-white'
+              className={`px-2.5 py-1 rounded-md text-[10px] font-medium ${
+                sortBy === key ? 'bg-white text-black' : 'bg-[#111] text-[#666] hover:text-white hover:bg-[#1a1a1a]'
               }`}
             >
               {key.charAt(0).toUpperCase() + key.slice(1)}
@@ -119,8 +118,7 @@ export const TokenList = ({ tokens, selectedTokens, onToggleToken, loading = fal
         </div>
       </div>
 
-      {/* List */}
-      <div className="space-y-px max-h-[60vh] overflow-y-auto">
+      <div className="space-y-0.5 max-h-[60vh] overflow-y-auto">
         {sortedTokens.map((token) => {
           const isExpanded = expandedTokens.has(token.address);
           const tradable = isTradable(token);
@@ -130,56 +128,54 @@ export const TokenList = ({ tokens, selectedTokens, onToggleToken, loading = fal
           return (
             <div
               key={token.address}
-              className={`rounded-md border transition-all ${
+              className={`rounded-lg border ${
                 isDanger
-                  ? selected ? 'border-red-500/30 bg-[#111]' : 'border-transparent bg-[#0a0a0a] hover:bg-[#111]'
-                  : selected ? 'border-[#333] bg-[#111]' : 'border-transparent bg-[#0a0a0a] hover:bg-[#111]'
+                  ? selected ? 'border-red-500/25 bg-red-500/[0.03]' : 'border-transparent hover:border-[#222] hover:bg-[#0e0e0e]'
+                  : selected ? 'border-[#333] bg-white/[0.02]' : 'border-transparent hover:border-[#222] hover:bg-[#0e0e0e]'
               }`}
             >
               <div
-                className={`flex items-center gap-2 px-2.5 py-2 ${tradable ? 'cursor-pointer' : 'cursor-not-allowed opacity-40'}`}
+                className={`flex items-center gap-2.5 px-3 py-2.5 select-none ${tradable ? 'cursor-pointer' : 'cursor-not-allowed opacity-35'}`}
                 onClick={() => tradable && onToggleToken(token.address)}
               >
-                {/* Checkbox */}
-                <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${
-                  selected ? 'border-white bg-white' : 'border-[#444]'
+                <div className={`w-4 h-4 rounded-[4px] border-[1.5px] flex items-center justify-center flex-shrink-0 ${
+                  selected ? 'border-white bg-white' : 'border-[#333] hover:border-[#555]'
                 }`}>
                   {selected && (
-                    <svg className="w-2 h-2 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    <svg className="w-2.5 h-2.5 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                     </svg>
                   )}
                 </div>
 
-                {/* Symbol + risk dot */}
                 <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                  <span className="font-medium text-white text-xs">{token.symbol}</span>
+                  <span className="font-medium text-[#ededed] text-[13px]">{token.symbol}</span>
                   {token.security && (
                     <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${RISK_DOT[token.security.riskLevel] || RISK_DOT.safe}`} />
                   )}
                   {!tradable && (
-                    <span className="text-[9px] text-[#444]">no liquidity</span>
+                    <span className="text-[9px] text-[#333] ml-0.5">no liquidity</span>
                   )}
                 </div>
 
-                {/* Value */}
-                <div className="text-right flex-shrink-0">
-                  <span className="text-xs text-[#ededed]">${token.valueUSD?.toFixed(2) || '0.00'}</span>
-                </div>
+                <span className="text-[13px] text-[#ededed] tabular-nums flex-shrink-0">
+                  ${token.valueUSD?.toFixed(2) || '0.00'}
+                </span>
 
-                {/* Expand */}
                 {token.security && (
-                  <button onClick={(e) => toggleExpand(token.address, e)} className="p-0.5 rounded hover:bg-[#222] flex-shrink-0 transition-colors">
-                    <svg className={`w-3 h-3 text-[#555] transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  <button
+                    onClick={(e) => toggleExpand(token.address, e)}
+                    className="p-1 -mr-1 rounded-md hover:bg-[#1a1a1a] flex-shrink-0"
+                  >
+                    <svg className={`w-3.5 h-3.5 text-[#555] ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                     </svg>
                   </button>
                 )}
               </div>
 
-              {/* Expanded security */}
               {isExpanded && token.security && (
-                <div className="px-2.5 pb-2">
+                <div className="px-3 pb-3">
                   <SecurityPanel security={token.security} tokenAddress={token.address} />
                 </div>
               )}

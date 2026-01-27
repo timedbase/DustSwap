@@ -19,7 +19,7 @@ export const WalletConnect = () => {
                 return (
                   <button
                     onClick={openConnectModal}
-                    className="px-5 py-2.5 bg-[#FF007A] hover:bg-[#FF1A8C] text-white rounded-xl text-sm font-semibold transition-all"
+                    className="px-4 py-2 bg-white text-black hover:bg-[#ededed] rounded-lg text-sm font-medium"
                   >
                     Connect Wallet
                   </button>
@@ -30,7 +30,7 @@ export const WalletConnect = () => {
                 return (
                   <button
                     onClick={openChainModal}
-                    className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-medium transition-colors"
+                    className="px-4 py-2 bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 rounded-lg text-sm font-medium"
                   >
                     Wrong network
                   </button>
@@ -38,25 +38,25 @@ export const WalletConnect = () => {
               }
 
               return (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   <button
                     onClick={openChainModal}
-                    className="px-3 py-2 bg-[#191B1F] hover:bg-[#212429] border border-[#2C2F36] rounded-xl text-white text-xs font-medium transition-all flex items-center gap-1.5"
+                    className="px-2.5 py-1.5 bg-[#111] hover:bg-[#1a1a1a] border border-[#222] hover:border-[#333] rounded-lg text-[#ededed] text-xs font-medium flex items-center gap-1.5"
                   >
                     {chain.hasIcon && chain.iconUrl && (
                       <img
                         alt={chain.name ?? 'Chain'}
                         src={chain.iconUrl}
-                        className="w-4 h-4 rounded-full"
+                        className="w-3.5 h-3.5 rounded-full"
                       />
                     )}
                     {chain.name}
                   </button>
                   <button
                     onClick={openAccountModal}
-                    className="px-4 py-2 bg-[#191B1F] hover:bg-[#212429] border border-[#2C2F36] rounded-xl text-white text-sm font-medium transition-all flex items-center gap-2"
+                    className="px-3 py-1.5 bg-[#111] hover:bg-[#1a1a1a] border border-[#222] hover:border-[#333] rounded-lg text-[#ededed] text-sm font-medium flex items-center gap-2"
                   >
-                    <div className="w-2 h-2 bg-green-500 rounded-full" />
+                    <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
                     {account.displayName}
                   </button>
                 </div>
