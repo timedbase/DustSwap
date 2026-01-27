@@ -32,7 +32,6 @@ export const SwapCard = ({ tokens, provider, onSwapComplete }: SwapCardProps) =>
 
   const [txStatus, setTxStatus] = useState<'idle' | 'approving' | 'swapping' | 'success' | 'error'>('idle');
   const [txHash, setTxHash] = useState<string>('');
-  const [errorMessage, setErrorMessage] = useState<string>('');
   const [approvalProgress, setApprovalProgress] = useState({ current: 0, total: 0, token: '' });
 
   useEffect(() => {
@@ -53,7 +52,6 @@ export const SwapCard = ({ tokens, provider, onSwapComplete }: SwapCardProps) =>
         setServiceFee(formatEther(result.serviceFee));
         setUserReceives(formatEther(result.totalBNBAfterFee));
       } catch (error) {
-        console.error('Error getting quotes:', error);
         setTotalBNBExpected('0');
         setServiceFee('0');
         setUserReceives('0');
@@ -80,7 +78,6 @@ export const SwapCard = ({ tokens, provider, onSwapComplete }: SwapCardProps) =>
 
   const handleSwap = async () => {
     if (!provider || tokens.length === 0 || !DUSTSWAP_ROUTER_ADDRESS) {
-      setErrorMessage('Invalid configuration or no tokens selected');
       setTxStatus('error');
       return;
     }
@@ -88,7 +85,6 @@ export const SwapCard = ({ tokens, provider, onSwapComplete }: SwapCardProps) =>
     try {
       setLoading(true);
       setTxStatus('approving');
-      setErrorMessage('');
 
       const signer = await provider.getSigner();
       const userAddress = await signer.getAddress();
@@ -141,16 +137,8 @@ export const SwapCard = ({ tokens, provider, onSwapComplete }: SwapCardProps) =>
         onSwapComplete();
       }
     } catch (error: any) {
-      console.error('Swap error:', error);
       setTxStatus('error');
 
-      if (error.code === 'ACTION_REJECTED') {
-        setErrorMessage('Transaction rejected by user');
-      } else if (error.message) {
-        setErrorMessage(error.message);
-      } else {
-        setErrorMessage('Swap failed. Please try again.');
-      }
     } finally {
       setLoading(false);
     }
@@ -159,7 +147,6 @@ export const SwapCard = ({ tokens, provider, onSwapComplete }: SwapCardProps) =>
   const resetTransaction = () => {
     setTxStatus('idle');
     setTxHash('');
-    setErrorMessage('');
     setApprovalProgress({ current: 0, total: 0, token: '' });
   };
 
@@ -295,15 +282,9 @@ export const SwapCard = ({ tokens, provider, onSwapComplete }: SwapCardProps) =>
       )}
 
       {txStatus === 'error' && (
-        <div className="space-y-3">
-          <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-4">
-            <p className="text-red-400 text-sm font-medium">Swap failed</p>
-            <p className="text-xs text-[#888] mt-1">{errorMessage}</p>
-          </div>
-          <button onClick={resetTransaction} className="w-full py-2.5 bg-[#1a1a1a] hover:bg-[#222] text-white rounded-lg text-sm transition-colors">
-            Try Again
-          </button>
-        </div>
+        <button onClick={resetTransaction} className="w-full py-3 bg-[#1a1a1a] hover:bg-[#222] text-white rounded-lg text-sm font-medium">
+          Retry
+        </button>
       )}
     </div>
   );

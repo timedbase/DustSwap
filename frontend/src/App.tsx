@@ -4,6 +4,7 @@ import { SwapCard } from './components/SwapCard';
 import { TokenListModal } from './components/TokenListModal';
 import { useWallet } from './hooks/useWallet';
 import { useTokenBalances } from './hooks/useTokenBalances';
+import { useEnsResolve } from './hooks/useEnsResolve';
 import type { TokenWithPrice } from './types';
 
 const isTradable = (t: TokenWithPrice) =>
@@ -15,8 +16,10 @@ function App() {
   const [viewAddress, setViewAddress] = useState<string | null>(null);
   const [showTokenList, setShowTokenList] = useState(false);
 
+  const ens = useEnsResolve(manualAddress);
+
   const activeAddress = isConnected ? connectedAddress : viewAddress;
-  const { dustTokens, loading, error, refetch } = useTokenBalances(activeAddress);
+  const { dustTokens, loading, refetch } = useTokenBalances(activeAddress);
   const [selectedTokenAddresses, setSelectedTokenAddresses] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -47,7 +50,9 @@ function App() {
   };
 
   const handleViewAddress = () => {
-    if (manualAddress.startsWith('0x') && manualAddress.length === 42) setViewAddress(manualAddress);
+    if (ens.resolvedAddress) {
+      setViewAddress(ens.resolvedAddress);
+    }
   };
 
   const handleClearViewAddress = () => {
@@ -57,7 +62,6 @@ function App() {
   };
 
   const selectedTokens: TokenWithPrice[] = dustTokens.filter((t) => selectedTokenAddresses.has(t.address));
-  const isValidAddress = manualAddress.startsWith('0x') && manualAddress.length === 42;
   const tradableCount = dustTokens.filter(isTradable).length;
 
   return (
@@ -78,24 +82,36 @@ function App() {
         {!isConnected && !viewAddress && (
           <div className="w-full max-w-[480px] mb-6">
             <div className="bg-[#111] border border-[#222] rounded-xl p-4">
-              <p className="text-[#888] text-sm mb-3">Enter a wallet address to view</p>
+              <p className="text-[#888] text-sm mb-3">Enter a wallet address or ENS name</p>
               <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="0x..."
-                  value={manualAddress}
-                  onChange={(e) => setManualAddress(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleViewAddress()}
-                  className="flex-1 px-3 py-2 bg-black border border-[#333] rounded-lg text-white text-sm placeholder-[#555] focus:border-[#ededed] focus:outline-none transition-colors min-w-0"
-                />
+                <div className="flex-1 min-w-0 relative">
+                  <input
+                    type="text"
+                    placeholder="0x... or vitalik.eth"
+                    value={manualAddress}
+                    onChange={(e) => setManualAddress(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleViewAddress()}
+                    className="w-full px-3 py-2 bg-black border border-[#333] rounded-lg text-white text-sm placeholder-[#555] focus:border-[#ededed] focus:outline-none min-w-0"
+                  />
+                  {ens.resolving && (
+                    <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
+                      <div className="w-3.5 h-3.5 border-[1.5px] border-white/20 border-t-white rounded-full animate-spin" />
+                    </div>
+                  )}
+                </div>
                 <button
                   onClick={handleViewAddress}
-                  disabled={!isValidAddress}
-                  className="px-4 py-2 bg-white text-black hover:bg-[#ededed] disabled:bg-[#222] disabled:text-[#555] disabled:cursor-not-allowed rounded-lg text-sm font-medium transition-colors"
+                  disabled={!ens.isValid || ens.resolving}
+                  className="px-4 py-2 bg-white text-black hover:bg-[#ededed] disabled:bg-[#222] disabled:text-[#555] disabled:cursor-not-allowed rounded-lg text-sm font-medium"
                 >
                   View
                 </button>
               </div>
+              {ens.isEns && ens.resolvedAddress && (
+                <p className="text-green-400 text-[11px] mt-2 font-mono">
+                  {ens.resolvedAddress.slice(0, 6)}...{ens.resolvedAddress.slice(-4)}
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -104,15 +120,15 @@ function App() {
         {viewAddress && !isConnected && (
           <div className="flex items-center gap-2 mb-6 bg-[#111] border border-[#222] rounded-lg px-3 py-2">
             <span className="text-[#666] text-xs">Viewing</span>
-            <span className="text-white font-mono text-xs">{viewAddress.slice(0, 6)}...{viewAddress.slice(-4)}</span>
+            {ens.ensName ? (
+              <>
+                <span className="text-white text-xs font-medium">{ens.ensName}</span>
+                <span className="text-[#555] font-mono text-[10px]">{viewAddress.slice(0, 6)}...{viewAddress.slice(-4)}</span>
+              </>
+            ) : (
+              <span className="text-white font-mono text-xs">{viewAddress.slice(0, 6)}...{viewAddress.slice(-4)}</span>
+            )}
             <button onClick={handleClearViewAddress} className="text-[#666] hover:text-white text-xs ml-1">&times;</button>
-          </div>
-        )}
-
-        {/* Error */}
-        {error && (
-          <div className="w-full max-w-[480px] mb-4 bg-red-500/10 border border-red-500/20 rounded-lg p-3">
-            <p className="text-red-400 text-xs">{error}</p>
           </div>
         )}
 
