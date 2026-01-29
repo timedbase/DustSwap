@@ -176,18 +176,35 @@ function App() {
                 ) : (
                   <div>
                     {/* Estimate */}
-                    <div className="mb-4 p-4 bg-[#0a0a0a] rounded-lg border border-[#222]">
-                      <div className="text-xs text-[#666] mb-1">Estimated output</div>
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-semibold text-white">
-                          ~{(selectedTokens.reduce((s, t) => s + (t.valueUSD || 0), 0) * 0.9 / 600).toFixed(4)}
-                        </span>
-                        <span className="text-[#888] text-sm">BNB</span>
-                      </div>
-                      <div className="mt-1 text-xs text-[#555]">
-                        ~${(selectedTokens.reduce((s, t) => s + (t.valueUSD || 0), 0) * 0.9).toFixed(2)} after fee
-                      </div>
-                    </div>
+                    {(() => {
+                      const totalUSD = selectedTokens.reduce((s, t) => s + (t.valueUSD || 0), 0);
+                      const taxDeduction = selectedTokens.reduce((s, t) => {
+                        const tax = t.security?.sellTax ?? 0;
+                        return s + (t.valueUSD || 0) * tax;
+                      }, 0);
+                      const taxTokens = selectedTokens.filter(t => (t.security?.sellTax ?? 0) > 0).length;
+                      const afterTax = totalUSD - taxDeduction;
+                      const afterFee = afterTax * 0.9;
+                      return (
+                        <div className="mb-4 p-4 bg-[#0a0a0a] rounded-lg border border-[#222]">
+                          <div className="text-xs text-[#666] mb-1">Estimated output</div>
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-2xl font-semibold text-white">
+                              ~{(afterFee / 600).toFixed(4)}
+                            </span>
+                            <span className="text-[#888] text-sm">BNB</span>
+                          </div>
+                          <div className="mt-1 text-xs text-[#555]">
+                            ~${afterFee.toFixed(2)} after fee
+                            {taxTokens > 0 && taxDeduction > 0.01 && (
+                              <span className="text-yellow-500 ml-1">
+                                (incl. ~${taxDeduction.toFixed(2)} tax)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     <div className="flex flex-col items-center gap-3">
                       <div className="w-full py-3 bg-white/5 border border-[#333] rounded-lg text-center">

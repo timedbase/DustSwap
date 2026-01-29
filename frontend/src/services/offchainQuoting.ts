@@ -40,9 +40,12 @@ export interface QuoteResult {
 
 export interface BatchQuoteResult {
   instructions: SwapInstruction[];
-  totalBNBExpected: string;
-  totalBNBAfterFee: string; // After 10% fee
+  totalBNBExpected: string;        // Raw quote before taxes
+  totalBNBAfterTax: string;        // After token transfer taxes
+  totalBNBAfterFee: string;        // After 10% service fee
   serviceFee: string;
+  totalTaxDeducted: string;        // Amount lost to token taxes
+  taxTokenCount: number;           // Number of tokens with >0% tax
 }
 
 /**
@@ -157,6 +160,7 @@ export class OffchainQuotingService {
 
   /**
    * Get batch quotes for multiple tokens with slippage
+   * Accounts for fee-on-transfer tokens by deducting sell tax from expected output
    */
   async getBatchQuotes(
     tokens: TokenWithPrice[],
@@ -164,6 +168,9 @@ export class OffchainQuotingService {
   ): Promise<BatchQuoteResult> {
     const instructions: SwapInstruction[] = [];
     let totalBNBExpected = 0n;
+    let totalBNBAfterTax = 0n;
+    let totalTaxDeducted = 0n;
+    let taxTokenCount = 0;
 
     // Get quotes for all tokens in parallel
     const quotePromises = tokens.map((token) =>
@@ -182,10 +189,28 @@ export class OffchainQuotingService {
       const amountOut = BigInt(quote.amountOut);
       totalBNBExpected += amountOut;
 
-      // Calculate minimum amount with slippage
-      const slippageBps = Math.floor(slippagePercent * 100); // 0.5% = 50 bps
+      // Apply sell tax if token has fee-on-transfer
+      const sellTaxPercent = token.security?.sellTax ?? 0;
+      let amountAfterTax = amountOut;
+
+      if (sellTaxPercent > 0) {
+        taxTokenCount++;
+        // Convert percent to basis points (e.g., 5% = 500 bps)
+        const taxBps = Math.floor(sellTaxPercent * 100);
+        const taxAmount = (amountOut * BigInt(taxBps)) / BigInt(10000);
+        amountAfterTax = amountOut - taxAmount;
+        totalTaxDeducted += taxAmount;
+      }
+
+      totalBNBAfterTax += amountAfterTax;
+
+      // Calculate minimum amount with slippage (applied after tax)
+      // For high-tax tokens, add extra slippage buffer
+      const extraSlippage = sellTaxPercent > 5 ? 2 : (sellTaxPercent > 0 ? 1 : 0);
+      const effectiveSlippage = slippagePercent + extraSlippage;
+      const slippageBps = Math.floor(effectiveSlippage * 100);
       const minAmountOut =
-        (amountOut * BigInt(10000 - slippageBps)) / BigInt(10000);
+        (amountAfterTax * BigInt(10000 - slippageBps)) / BigInt(10000);
 
       instructions.push({
         token: token.address,
@@ -196,15 +221,18 @@ export class OffchainQuotingService {
       });
     }
 
-    // Calculate 10% service fee
-    const serviceFee = (totalBNBExpected * BigInt(10)) / BigInt(100);
-    const totalBNBAfterFee = totalBNBExpected - serviceFee;
+    // Calculate 10% service fee (on post-tax amount)
+    const serviceFee = (totalBNBAfterTax * BigInt(10)) / BigInt(100);
+    const totalBNBAfterFee = totalBNBAfterTax - serviceFee;
 
     return {
       instructions,
       totalBNBExpected: totalBNBExpected.toString(),
+      totalBNBAfterTax: totalBNBAfterTax.toString(),
       totalBNBAfterFee: totalBNBAfterFee.toString(),
       serviceFee: serviceFee.toString(),
+      totalTaxDeducted: totalTaxDeducted.toString(),
+      taxTokenCount,
     };
   }
 

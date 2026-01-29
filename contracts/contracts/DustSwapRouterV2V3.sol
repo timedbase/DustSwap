@@ -182,7 +182,7 @@ contract DustSwapRouterV2V3 is Ownable, ReentrancyGuard {
 
     /**
      * @notice Execute V2 swap to BNB
-     * @dev Internal function, returns BNB received
+     * @dev Uses SupportingFeeOnTransferTokens to handle tax tokens correctly
      */
     function _swapV2ToBNB(
         IERC20 token,
@@ -198,7 +198,9 @@ contract DustSwapRouterV2V3 is Ownable, ReentrancyGuard {
         path[0] = address(token);
         path[1] = WBNB;
 
-        try pancakeRouterV2.swapExactTokensForETH(
+        // Use SupportingFeeOnTransferTokens for tax tokens
+        // This function measures actual received amounts instead of calculated
+        try pancakeRouterV2.swapExactTokensForETHSupportingFeeOnTransferTokens(
             amount,
             minAmountOut,
             path,

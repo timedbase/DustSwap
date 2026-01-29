@@ -153,6 +153,11 @@ export const TokenList = ({ tokens, selectedTokens, onToggleToken, loading = fal
                   {token.security && (
                     <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${RISK_DOT[token.security.riskLevel] || RISK_DOT.safe}`} />
                   )}
+                  {token.security && token.security.sellTax > 0.01 && (
+                    <span className="text-[9px] text-yellow-500 font-medium ml-0.5">
+                      {(token.security.sellTax * 100).toFixed(0)}%
+                    </span>
+                  )}
                   {!tradable && (
                     <span className="text-[9px] text-[#333] ml-0.5">no liquidity</span>
                   )}

@@ -26,6 +26,8 @@ export const SwapCard = ({ tokens, provider, onSwapComplete }: SwapCardProps) =>
   const [quoting, setQuoting] = useState(false);
 
   const [totalBNBExpected, setTotalBNBExpected] = useState('0');
+  const [totalTaxDeducted, setTotalTaxDeducted] = useState('0');
+  const [taxTokenCount, setTaxTokenCount] = useState(0);
   const [serviceFee, setServiceFee] = useState('0');
   const [userReceives, setUserReceives] = useState('0');
   const [instructions, setInstructions] = useState<SwapInstruction[]>([]);
@@ -38,6 +40,8 @@ export const SwapCard = ({ tokens, provider, onSwapComplete }: SwapCardProps) =>
     const getQuotes = async () => {
       if (!provider || tokens.length === 0) {
         setTotalBNBExpected('0');
+        setTotalTaxDeducted('0');
+        setTaxTokenCount(0);
         setServiceFee('0');
         setUserReceives('0');
         setInstructions([]);
@@ -49,10 +53,14 @@ export const SwapCard = ({ tokens, provider, onSwapComplete }: SwapCardProps) =>
         const result = await offchainQuoter.getBatchQuotes(tokens, slippage);
         setInstructions(result.instructions);
         setTotalBNBExpected(formatEther(result.totalBNBExpected));
+        setTotalTaxDeducted(formatEther(result.totalTaxDeducted));
+        setTaxTokenCount(result.taxTokenCount);
         setServiceFee(formatEther(result.serviceFee));
         setUserReceives(formatEther(result.totalBNBAfterFee));
       } catch (error) {
         setTotalBNBExpected('0');
+        setTotalTaxDeducted('0');
+        setTaxTokenCount(0);
         setServiceFee('0');
         setUserReceives('0');
       } finally {
@@ -210,6 +218,12 @@ export const SwapCard = ({ tokens, provider, onSwapComplete }: SwapCardProps) =>
               <span className="text-white text-xs font-medium">{parseFloat(totalBNBExpected).toFixed(6)} BNB</span>
             </div>
             <div className="border-t border-[#222] pt-3">
+              {taxTokenCount > 0 && parseFloat(totalTaxDeducted) > 0 && (
+                <div className="flex justify-between text-xs mb-2">
+                  <span className="text-[#666]">Token tax ({taxTokenCount})</span>
+                  <span className="text-yellow-500">-{parseFloat(totalTaxDeducted).toFixed(6)} BNB</span>
+                </div>
+              )}
               <div className="flex justify-between text-xs mb-2">
                 <span className="text-[#666]">Fee (10%)</span>
                 <span className="text-[#888]">-{parseFloat(serviceFee).toFixed(6)} BNB</span>
