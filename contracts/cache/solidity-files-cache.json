@@ -312,8 +312,8 @@
       ]
     },
     "/workspaces/DustSwap/contracts/contracts/DustSwapRouterX.sol": {
-      "lastModificationDate": 1776743799302,
-      "contentHash": "b1e753c95c8a20872899b7329b50fc29",
+      "lastModificationDate": 1776764174169,
+      "contentHash": "edea5a724e976495cd23c1178fe9929f",
       "sourceName": "contracts/DustSwapRouterX.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -343,6 +343,7 @@
       "imports": [
         "@openzeppelin/contracts/access/Ownable.sol",
         "@openzeppelin/contracts/utils/ReentrancyGuard.sol",
+        "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol",
         "./interfaces/IERC20.sol",
         "./interfaces/IPancakeRouter02.sol",
         "./interfaces/IPancakeV3SwapRouter.sol"
@@ -352,6 +353,43 @@
       ],
       "artifacts": [
         "DustSwapRouterX"
+      ]
+    },
+    "/workspaces/DustSwap/contracts/node_modules/@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol": {
+      "lastModificationDate": 1776736242533,
+      "contentHash": "b01905745d47df90c7bd5dd70d498cb7",
+      "sourceName": "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "viaIR": true,
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        ">=0.4.16"
+      ],
+      "artifacts": [
+        "IERC20Permit"
       ]
     }
   }

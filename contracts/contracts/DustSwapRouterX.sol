@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IPancakeRouter02.sol";
 import "./interfaces/IPancakeV3SwapRouter.sol";
@@ -54,6 +55,12 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
         RouterVersion version;
         /// @dev V3 pool fee tier: 100, 500, 2500, or 10000. Ignored for V2.
         uint24 v3Fee;
+        // ── EIP-2612 permit (optional) ──────────────────────────────────────
+        // Set permitDeadline = 0 to skip permit and rely on a pre-existing allowance.
+        uint256 permitDeadline;
+        uint8   permitV;
+        bytes32 permitR;
+        bytes32 permitS;
     }
 
     // ─── Events ───────────────────────────────────────────────────────────────
@@ -215,6 +222,15 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
         address _outputToken,
         uint256 deadline
     ) internal returns (uint256 amountOut) {
+        // EIP-2612: call permit before transferFrom so the user needs no prior approval.
+        // Silently ignored if the token doesn't support permit or the allowance already covers it.
+        if (inst.permitDeadline != 0) {
+            try IERC20Permit(inst.token).permit(
+                msg.sender, address(this), inst.amount,
+                inst.permitDeadline, inst.permitV, inst.permitR, inst.permitS
+            ) {} catch {}
+        }
+
         IERC20 token = IERC20(inst.token);
         uint256 balBefore = token.balanceOf(address(this));
         if (!token.transferFrom(msg.sender, address(this), inst.amount)) revert TransferFailed();
