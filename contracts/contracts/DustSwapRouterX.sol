@@ -185,27 +185,8 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
             }
             if (inst.amount == 0) continue;
 
-            // Pull tokens; measure actual received to support fee-on-transfer input tokens.
-            IERC20 token = IERC20(inst.token);
-            uint256 balBefore = token.balanceOf(address(this));
-            if (!token.transferFrom(msg.sender, address(this), inst.amount)) revert TransferFailed();
-            uint256 actualAmount = token.balanceOf(address(this)) - balBefore;
-
-            uint256 amountOut;
-            if (inst.version == RouterVersion.V2) {
-                amountOut = _swapV2ToOutputToken(
-                    token, actualAmount, inst.minAmountOut, _outputToken, deadline
-                );
-            } else {
-                amountOut = _swapV3ToOutputToken(
-                    token, actualAmount, inst.v3Fee, inst.minAmountOut, _outputToken, deadline
-                );
-            }
-
-            if (amountOut > 0) {
-                tokensSwapped++;
-                emit SingleSwapCompleted(msg.sender, inst.token, actualAmount, amountOut, inst.version);
-            }
+            // Delegate transfer + swap to helper to keep this frame's stack shallow.
+            if (_executeSwap(inst, _outputToken, deadline) > 0) tokensSwapped++;
         }
 
         uint256 totalOutput = IERC20(_outputToken).balanceOf(address(this)) - initialBalance;
@@ -223,6 +204,32 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
     }
 
     // ─── Internal Swap Helpers ────────────────────────────────────────────────
+
+    /**
+     * @dev Pull tokens from the caller, measure actual received, route to V2 or V3,
+     *      emit SingleSwapCompleted, and return amountOut.
+     *      Extracted to keep batchSwapToToken's stack frame shallow.
+     */
+    function _executeSwap(
+        SwapInstruction calldata inst,
+        address _outputToken,
+        uint256 deadline
+    ) internal returns (uint256 amountOut) {
+        IERC20 token = IERC20(inst.token);
+        uint256 balBefore = token.balanceOf(address(this));
+        if (!token.transferFrom(msg.sender, address(this), inst.amount)) revert TransferFailed();
+        uint256 actualAmount = token.balanceOf(address(this)) - balBefore;
+
+        if (inst.version == RouterVersion.V2) {
+            amountOut = _swapV2ToOutputToken(token, actualAmount, inst.minAmountOut, _outputToken, deadline);
+        } else {
+            amountOut = _swapV3ToOutputToken(token, actualAmount, inst.v3Fee, inst.minAmountOut, _outputToken, deadline);
+        }
+
+        if (amountOut > 0) {
+            emit SingleSwapCompleted(msg.sender, inst.token, actualAmount, amountOut, inst.version);
+        }
+    }
 
     /**
      * @dev V2 path: tokenIn → WBNB → outputToken.
