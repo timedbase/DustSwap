@@ -34,6 +34,15 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
     /// @notice ERC20 token that users receive after a dust swap.
     address public outputToken;
 
+    /// @notice Pending output token queued via proposeOutputToken (address(0) if none).
+    address public pendingOutputToken;
+
+    /// @notice Timestamp after which pendingOutputToken can be applied.
+    uint256 public pendingOutputTokenActiveAt;
+
+    /// @notice Minimum delay between proposing and applying an outputToken change.
+    uint256 public constant OUTPUT_TOKEN_TIMELOCK = 48 hours;
+
     /// @notice Address that collects the service fee.
     address public feeRecipient;
 
@@ -84,6 +93,8 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
 
     event FeeUpdated(uint256 oldFee, uint256 newFee);
     event FeeRecipientUpdated(address indexed oldRecipient, address indexed newRecipient);
+    event OutputTokenProposed(address indexed newToken, uint256 activeAt);
+    event OutputTokenProposalCancelled(address indexed cancelledToken);
     event OutputTokenUpdated(address indexed oldToken, address indexed newToken);
 
     // ─── Errors ───────────────────────────────────────────────────────────────
@@ -97,6 +108,8 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
     error EmptySwapList();
     error FeeTooHigh();
     error InsufficientOutput();
+    error TimelockActive(uint256 activeAt);
+    error NoPendingOutputToken();
 
     // ─── Constructor ──────────────────────────────────────────────────────────
 
@@ -152,13 +165,38 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Update the ERC20 output token users receive.
+     * @notice Queue an outputToken change. Takes effect after OUTPUT_TOKEN_TIMELOCK (48 h).
+     *         Emits OutputTokenProposed so users can see the change coming and act accordingly.
      * @param _newToken New output token address. Must not be zero or WBNB.
      */
-    function setOutputToken(address _newToken) external onlyOwner {
+    function proposeOutputToken(address _newToken) external onlyOwner {
         if (_newToken == address(0) || _newToken == WBNB) revert InvalidOutputToken();
-        emit OutputTokenUpdated(outputToken, _newToken);
-        outputToken = _newToken;
+        pendingOutputToken = _newToken;
+        pendingOutputTokenActiveAt = block.timestamp + OUTPUT_TOKEN_TIMELOCK;
+        emit OutputTokenProposed(_newToken, pendingOutputTokenActiveAt);
+    }
+
+    /**
+     * @notice Apply a previously proposed outputToken change once the timelock has elapsed.
+     */
+    function applyOutputToken() external onlyOwner {
+        if (pendingOutputToken == address(0)) revert NoPendingOutputToken();
+        if (block.timestamp < pendingOutputTokenActiveAt) revert TimelockActive(pendingOutputTokenActiveAt);
+        address old = outputToken;
+        outputToken = pendingOutputToken;
+        pendingOutputToken = address(0);
+        pendingOutputTokenActiveAt = 0;
+        emit OutputTokenUpdated(old, outputToken);
+    }
+
+    /**
+     * @notice Cancel a pending outputToken proposal before it is applied.
+     */
+    function cancelOutputToken() external onlyOwner {
+        if (pendingOutputToken == address(0)) revert NoPendingOutputToken();
+        emit OutputTokenProposalCancelled(pendingOutputToken);
+        pendingOutputToken = address(0);
+        pendingOutputTokenActiveAt = 0;
     }
 
     // ─── Main Swap ────────────────────────────────────────────────────────────
