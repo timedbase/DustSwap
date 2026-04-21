@@ -5,7 +5,7 @@ const hre = require("hardhat");
  *
  * Environment variables (all optional, fall back to defaults below):
  *   FEE_RECIPIENT   — address that collects the service fee (defaults to deployer)
- *   INITIAL_FEE_BPS — service fee in basis points, e.g. 1000 = 10% (default: 1000)
+ *   INITIAL_FEE_BPS — service fee in basis points, e.g. 1000 = 10% (default: 2000)
  *   OUTPUT_TOKEN    — ERC20 output token address (default: USDT per network)
  */
 async function main() {

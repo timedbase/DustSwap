@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IPancakeRouter02.sol";
@@ -12,9 +13,14 @@ import "./interfaces/IPancakeV3SwapRouter.sol";
  * @title DustSwapRouterX
  * @notice Batch swap dust tokens to a configurable ERC20 output token with an owner-updatable fee.
  *
- * Extends DustSwapRouterV2V3 with two key changes:
- *   1. Service fee is mutable (basis points, 0–20%), set by owner.
- *   2. Output is a configurable ERC20 token (e.g. USDT/USDC), not BNB.
+ * This contract self-implements the Permit2 SignatureTransfer scheme (EIP-712 + unordered nonce bitmap),
+ * meaning users only need to approve this contract once via the standard `approve()` call and can then
+ * authorise individual transfers with off-chain signatures — no external Permit2 contract dependency.
+ *
+ * Token approval priority per swap instruction:
+ *   1. Self-contained Permit2 signature  (permit2Sig.length > 0)
+ *   2. EIP-2612 native permit            (permitDeadline != 0)
+ *   3. Standard pre-existing allowance
  *
  * Routing:
  *   V2 — tokenIn → WBNB → outputToken  (swapExactTokensForTokensSupportingFeeOnTransferTokens)
@@ -23,11 +29,34 @@ import "./interfaces/IPancakeV3SwapRouter.sol";
  */
 contract DustSwapRouterX is Ownable, ReentrancyGuard {
 
+    using ECDSA for bytes32;
+
     // ─── Immutables ───────────────────────────────────────────────────────────
 
     IPancakeRouter02 public immutable pancakeRouterV2;
     IPancakeV3SwapRouter public immutable pancakeRouterV3;
     address public immutable WBNB;
+
+    // ─── Self-Contained Permit2 ───────────────────────────────────────────────
+    // Implements the Uniswap Permit2 SignatureTransfer pattern internally.
+    // Users approve this contract once; subsequent transfers are authorised by
+    // off-chain EIP-712 signatures, eliminating per-token approve transactions.
+
+    /// @notice EIP-712 domain separator for this contract's Permit2 scheme.
+    bytes32 public immutable DOMAIN_SEPARATOR;
+
+    bytes32 public constant TOKEN_PERMISSIONS_TYPEHASH =
+        keccak256("TokenPermissions(address token,uint256 amount)");
+
+    bytes32 public constant PERMIT_TRANSFER_TYPEHASH =
+        keccak256(
+            "PermitTransferFrom(TokenPermissions permitted,address spender,uint256 nonce,uint256 deadline)"
+            "TokenPermissions(address token,uint256 amount)"
+        );
+
+    /// @notice Unordered nonce bitmap: nonceBitmap[owner][wordPos] → 256-bit word.
+    /// @dev wordPos = nonce >> 8, bit index = nonce & 0xff. A set bit means the nonce is used.
+    mapping(address => mapping(uint256 => uint256)) public nonceBitmap;
 
     // ─── Mutable State ────────────────────────────────────────────────────────
 
@@ -46,7 +75,7 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
     /// @notice Address that collects the service fee.
     address public feeRecipient;
 
-    /// @notice Service fee in basis points (e.g. 1000 = 10%). Max 2000 (20%).
+    /// @notice Service fee in basis points (e.g. 2000 = 20%). Max 5000 (50%).
     uint256 public serviceFee;
 
     uint256 public constant MAX_FEE = 5000;
@@ -64,8 +93,16 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
         RouterVersion version;
         /// @dev V3 pool fee tier: 100, 500, 2500, or 10000. Ignored for V2.
         uint24 v3Fee;
-        // ── EIP-2612 permit (optional) ──────────────────────────────────────
-        // Set permitDeadline = 0 to skip permit and rely on a pre-existing allowance.
+        // ── Self-contained Permit2 (optional, highest priority) ─────────────
+        // Sign an EIP-712 PermitTransferFrom message off-chain. This contract
+        // verifies the signature and consumes the nonce, then calls transferFrom.
+        // Requires the user to have approved this contract via the standard approve().
+        // Set permit2Sig to empty bytes to skip.
+        uint256 permit2Nonce;
+        uint256 permit2Deadline; // 0 = use the swap deadline
+        bytes   permit2Sig;
+        // ── EIP-2612 native permit (optional, used when permit2Sig is empty) ─
+        // Set permitDeadline = 0 to skip and rely on a pre-existing allowance.
         uint256 permitDeadline;
         uint8   permitV;
         bytes32 permitR;
@@ -96,6 +133,7 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
     event OutputTokenProposed(address indexed newToken, uint256 activeAt);
     event OutputTokenProposalCancelled(address indexed cancelledToken);
     event OutputTokenUpdated(address indexed oldToken, address indexed newToken);
+    event NonceInvalidation(address indexed owner, uint256 wordPos, uint256 mask);
 
     // ─── Errors ───────────────────────────────────────────────────────────────
 
@@ -110,6 +148,8 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
     error InsufficientOutput();
     error TimelockActive(uint256 activeAt);
     error NoPendingOutputToken();
+    error InvalidNonce();
+    error InvalidSignature();
 
     // ─── Constructor ──────────────────────────────────────────────────────────
 
@@ -118,7 +158,7 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
      * @param _pancakeRouterV3 PancakeSwap Router V3 address
      * @param _outputToken     ERC20 token users receive (e.g. USDT). Must not be WBNB.
      * @param _feeRecipient    Address that collects the service fee
-     * @param _initialFee      Initial fee in basis points (e.g. 1000 = 10%)
+     * @param _initialFee      Initial fee in basis points (e.g. 2000 = 20%)
      */
     constructor(
         address _pancakeRouterV2,
@@ -140,13 +180,36 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
         outputToken = _outputToken;
         feeRecipient = _feeRecipient;
         serviceFee = _initialFee;
+
+        DOMAIN_SEPARATOR = keccak256(
+            abi.encode(
+                keccak256("EIP712Domain(string name,uint256 chainId,address verifyingContract)"),
+                keccak256("DustSwapRouterX"),
+                block.chainid,
+                address(this)
+            )
+        );
+    }
+
+    // ─── Permit2 — Nonce Management ───────────────────────────────────────────
+
+    /**
+     * @notice Invalidate specific nonces so they can never be used in a Permit2 signature.
+     * @dev    Callers can burn nonces they no longer wish to be valid.
+     *         wordPos = nonce >> 8; mask = 1 << (nonce & 0xff).
+     * @param wordPos  Word position in the bitmap.
+     * @param mask     Bitmask of nonces to invalidate within that word.
+     */
+    function invalidateNonces(uint256 wordPos, uint256 mask) external {
+        nonceBitmap[msg.sender][wordPos] |= mask;
+        emit NonceInvalidation(msg.sender, wordPos, mask);
     }
 
     // ─── Owner Configuration ──────────────────────────────────────────────────
 
     /**
      * @notice Update the service fee.
-     * @param _newFee New fee in basis points. Cannot exceed MAX_FEE (20%).
+     * @param _newFee New fee in basis points. Cannot exceed MAX_FEE (50%).
      */
     function setFee(uint256 _newFee) external onlyOwner {
         if (_newFee > MAX_FEE) revert FeeTooHigh();
@@ -207,7 +270,7 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
      * Per-swap failures are silently skipped and the token is returned to the
      * caller — consistent with DustSwapRouterV2V3 behaviour.
      *
-     * @param instructions  Array of swap instructions (token, amount, minOut, version, v3Fee).
+     * @param instructions  Array of swap instructions.
      * @param deadline      Unix timestamp; reverts if exceeded.
      * @return userAmount   Amount of outputToken sent to the caller after fee deduction.
      */
@@ -260,18 +323,28 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
         address _outputToken,
         uint256 deadline
     ) internal returns (uint256 amountOut) {
-        // EIP-2612: call permit before transferFrom so the user needs no prior approval.
-        // Silently ignored if the token doesn't support permit or the allowance already covers it.
-        if (inst.permitDeadline != 0) {
-            try IERC20Permit(inst.token).permit(
-                msg.sender, address(this), inst.amount,
-                inst.permitDeadline, inst.permitV, inst.permitR, inst.permitS
-            ) {} catch {}
-        }
-
         IERC20 token = IERC20(inst.token);
         uint256 balBefore = token.balanceOf(address(this));
-        if (!token.transferFrom(msg.sender, address(this), inst.amount)) revert TransferFailed();
+
+        if (inst.permit2Sig.length > 0) {
+            // ── Priority 1: Self-contained Permit2 ─────────────────────────
+            // Verify EIP-712 signature and consume the nonce, then transferFrom.
+            uint256 p2Deadline = inst.permit2Deadline != 0 ? inst.permit2Deadline : deadline;
+            _verifyAndConsumePermit(inst.token, inst.amount, inst.permit2Nonce, p2Deadline, msg.sender, inst.permit2Sig);
+            if (!token.transferFrom(msg.sender, address(this), inst.amount)) revert TransferFailed();
+        } else {
+            // ── Priority 2: EIP-2612 native permit ──────────────────────────
+            // Silently ignored if the token doesn't support it; falls through to transferFrom.
+            if (inst.permitDeadline != 0) {
+                try IERC20Permit(inst.token).permit(
+                    msg.sender, address(this), inst.amount,
+                    inst.permitDeadline, inst.permitV, inst.permitR, inst.permitS
+                ) {} catch {}
+            }
+            // ── Priority 3: standard pre-approved allowance ─────────────────
+            if (!token.transferFrom(msg.sender, address(this), inst.amount)) revert TransferFailed();
+        }
+
         uint256 actualAmount = token.balanceOf(address(this)) - balBefore;
 
         if (inst.version == RouterVersion.V2) {
@@ -283,6 +356,47 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
         if (amountOut > 0) {
             emit SingleSwapCompleted(msg.sender, inst.token, actualAmount, amountOut, inst.version);
         }
+    }
+
+    /**
+     * @dev Verify a Permit2 EIP-712 signature and consume the nonce.
+     *      Reverts with InvalidNonce if the nonce is already used.
+     *      Reverts with InvalidSignature if the signature does not match.
+     */
+    function _verifyAndConsumePermit(
+        address token,
+        uint256 amount,
+        uint256 nonce,
+        uint256 deadline,
+        address owner,
+        bytes calldata sig
+    ) internal {
+        if (block.timestamp > deadline) revert DeadlineExpired();
+        _useUnorderedNonce(owner, nonce);
+
+        bytes32 tokenPermissionsHash = keccak256(abi.encode(TOKEN_PERMISSIONS_TYPEHASH, token, amount));
+        bytes32 structHash = keccak256(abi.encode(
+            PERMIT_TRANSFER_TYPEHASH,
+            tokenPermissionsHash,
+            address(this),
+            nonce,
+            deadline
+        ));
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, structHash));
+        address recovered = digest.recover(sig);
+        if (recovered != owner) revert InvalidSignature();
+    }
+
+    /**
+     * @dev Mark a nonce as used. Reverts with InvalidNonce if already consumed.
+     */
+    function _useUnorderedNonce(address owner, uint256 nonce) internal {
+        uint256 wordPos = nonce >> 8;
+        uint256 bitPos  = nonce & 0xff;
+        uint256 bit     = 1 << bitPos;
+        uint256 flipped = nonceBitmap[owner][wordPos] ^= bit;
+        // After XOR the bit must be SET (1), meaning it was 0 before.
+        if (flipped & bit == 0) revert InvalidNonce();
     }
 
     /**

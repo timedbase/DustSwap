@@ -174,6 +174,16 @@ The built files will be in the `dist/` directory.
 
 **Output:** Any ERC20 — defaults to USDT at deploy. Changes are subject to a 48-hour timelock so users can observe and react before a new token takes effect.
 
+**Batch Approval — three-tier system:**
+
+Each `SwapInstruction` carries optional approval fields. The router tries them in priority order:
+
+1. **Self-contained Permit2** (`permit2Sig` non-empty) — The router implements the Uniswap Permit2 `SignatureTransfer` scheme internally (EIP-712 domain separator, unordered nonce bitmap, ECDSA verification). Users approve this router once via `approve()`, then sign lightweight off-chain messages per batch. Works for any ERC20. Nonces can be pre-emptively invalidated via `invalidateNonces(wordPos, mask)`.
+
+2. **EIP-2612 native permit** (`permitDeadline != 0`) — For tokens that natively support `permit()` (e.g. USDC, DAI). Sign an off-chain permit, pass `(permitDeadline, permitV, permitR, permitS)` in the instruction. Errors are silently swallowed so non-compliant tokens fall through gracefully.
+
+3. **Standard allowance** — Set `permit2Sig = ""` and `permitDeadline = 0`. Approve the router beforehand via the normal `approve()` flow.
+
 **Events:** `BatchSwapCompleted`, `SingleSwapCompleted`, `FeeUpdated`, `FeeRecipientUpdated`, `OutputTokenProposed`, `OutputTokenProposalCancelled`, `OutputTokenUpdated`
 
 ---
