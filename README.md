@@ -165,14 +165,16 @@ The built files will be in the `dist/` directory.
 - `getEstimatedOutputs(tokens, amounts)`: Off-chain quote helper via V2 path
 - `setFee(bps)`: Update service fee (owner only). Max 50% (5000 bps).
 - `setFeeRecipient(address)`: Update fee recipient (owner only)
-- `setOutputToken(address)`: Update the ERC20 output token (owner only)
+- `proposeOutputToken(address)`: Queue an output token change (owner only). 48 h timelock.
+- `applyOutputToken()`: Apply the queued change after 48 h elapses (owner only).
+- `cancelOutputToken()`: Abort a pending proposal (owner only).
 - `emergencyWithdraw(token, amount)`: Recover stuck tokens (owner only)
 
 **Fee:** Mutable, in basis points. Default 20% (2000 bps), max 50% (5000 bps).
 
-**Output:** Any ERC20 — defaults to USDT at deploy. Owner can change at any time.
+**Output:** Any ERC20 — defaults to USDT at deploy. Changes are subject to a 48-hour timelock so users can observe and react before a new token takes effect.
 
-**Events:** `BatchSwapCompleted`, `SingleSwapCompleted`, `FeeUpdated`, `FeeRecipientUpdated`, `OutputTokenUpdated`
+**Events:** `BatchSwapCompleted`, `SingleSwapCompleted`, `FeeUpdated`, `FeeRecipientUpdated`, `OutputTokenProposed`, `OutputTokenProposalCancelled`, `OutputTokenUpdated`
 
 ---
 

@@ -17,7 +17,7 @@ DustSwap is a complete Web3 DApp that combines DexScreener + PancakeSwap to dete
 - **DustSwapRouterX.sol**: V2+V3 batch router, mutable fee → ERC20 *(recommended)*
   - `batchSwapToToken()`: Swap dust tokens to configurable ERC20 output
   - `setFee(bps)`: Owner updates fee (0–50%, default 20%)
-  - `setOutputToken(address)`: Owner changes ERC20 output token
+  - `proposeOutputToken(address)` / `applyOutputToken()` / `cancelOutputToken()`: Owner changes ERC20 output token via 48-hour timelock
   - `setFeeRecipient(address)`: Owner updates fee recipient
   - `getEstimatedOutputs()`: Off-chain quote helper
 

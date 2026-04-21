@@ -25,7 +25,7 @@ DustSwap offers **three smart contract options** to suit different needs:
 | **PancakeSwap V2** | ✅ | ✅ | ✅ |
 | **PancakeSwap V3** | ❌ | ✅ | ✅ |
 | **Output token** | BNB | BNB | ERC20 (e.g. USDT) |
-| **Output token updatable** | ❌ | ❌ | ✅ owner |
+| **Output token updatable** | ❌ | ❌ | ✅ owner (48 h timelock) |
 | **Service fee** | None | Fixed 10% | Mutable 0–50% |
 | **Fee updatable** | ❌ | ❌ | ✅ owner |
 | **Manual routing** | ❌ | ✅ | ✅ |
@@ -365,7 +365,7 @@ Both contracts handle failures gracefully:
 
 **For production deployments: DustSwapRouterX** 🎯
 
-Why? It gives full operator control — adjust the fee at any time (0–50%), change the output token without redeploying, and route via both V2 and V3 for best prices. Users receive a stable ERC20 (e.g. USDT) instead of volatile BNB.
+Why? It gives full operator control — adjust the fee at any time (0–50%), change the output token (with a 48-hour timelock for user safety) without redeploying, and route via both V2 and V3 for best prices. Users receive a stable ERC20 (e.g. USDT) instead of volatile BNB.
 
 ---
 

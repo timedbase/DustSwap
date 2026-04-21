@@ -8,7 +8,7 @@
 - [x] Token → ERC20 output (DustSwapRouterX)
 - [x] Mutable service fee (0–50%, default 20%, basis points)
 - [x] Fee recipient configurable (owner)
-- [x] Output token configurable (owner)
+- [x] Output token configurable (owner, 48 h timelock)
 - [x] Deployment script updated (`deployRouterX.js`)
 
 ### Frontend Status
@@ -217,7 +217,10 @@ Deploy `dist/` folder to:
 - [ ] Fee sent to recipient in outputToken
 - [ ] User receives outputToken minus fee
 - [ ] `setFee()` works, rejects > 5000 bps
-- [ ] `setOutputToken()` works, rejects WBNB / zero address
+- [ ] `proposeOutputToken()` queues change and emits OutputTokenProposed
+- [ ] `applyOutputToken()` reverts before 48 h, applies after
+- [ ] `cancelOutputToken()` clears pending proposal
+- [ ] `proposeOutputToken()` rejects WBNB / zero address
 - [ ] Failed swap returns tokens to user
 - [ ] Emergency withdraw works (owner only)
 
@@ -260,8 +263,12 @@ cast call 0xYourContractAddress "feeRecipient()" --rpc-url https://bsc-dataseed.
 # Check current fee (basis points)
 cast call 0xYourContractAddress "serviceFee()" --rpc-url https://bsc-dataseed.binance.org/
 
-# Check output token
+# Check active output token
 cast call 0xYourContractAddress "outputToken()" --rpc-url https://bsc-dataseed.binance.org/
+
+# Check pending output token (address(0) if none queued)
+cast call 0xYourContractAddress "pendingOutputToken()" --rpc-url https://bsc-dataseed.binance.org/
+cast call 0xYourContractAddress "pendingOutputTokenActiveAt()" --rpc-url https://bsc-dataseed.binance.org/
 ```
 
 ### Check Frontend
