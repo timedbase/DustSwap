@@ -37,6 +37,14 @@ interface IPancakeRouter02 {
         uint deadline
     ) external;
 
+    function swapExactTokensForTokensSupportingFeeOnTransferTokens(
+        uint amountIn,
+        uint amountOutMin,
+        address[] calldata path,
+        address to,
+        uint deadline
+    ) external;
+
     function getAmountsOut(uint amountIn, address[] calldata path)
         external
         view

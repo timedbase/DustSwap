@@ -2,7 +2,7 @@
 
 ## Available Contracts
 
-DustSwap offers **two smart contract options** to suit different needs:
+DustSwap offers **three smart contract options** to suit different needs:
 
 ### 1. DustSwapRouter (V2 Only)
 **File:** `contracts/DustSwapRouter.sol`
@@ -10,22 +10,27 @@ DustSwap offers **two smart contract options** to suit different needs:
 
 ### 2. DustSwapRouterV2V3 (V2 + V3 Support)
 **File:** `contracts/DustSwapRouterV2V3.sol`
-**Best for:** Maximum output, automatic optimization, better rates
+**Best for:** Maximum BNB output, automatic optimization, better rates
+
+### 3. DustSwapRouterX (V2 + V3, ERC20 output, mutable fee) ⭐ Recommended
+**File:** `contracts/DustSwapRouterX.sol`
+**Best for:** Production deployments — owner-controlled fee and ERC20 output token
 
 ---
 
 ## Quick Comparison
 
-| Feature | DustSwapRouter (V2) | DustSwapRouterV2V3 (V2+V3) |
-|---------|-------------------|------------------------|
-| **PancakeSwap V2** | ✅ | ✅ |
-| **PancakeSwap V3** | ❌ | ✅ |
-| **Auto best price** | ❌ | ✅ |
-| **Manual routing** | ❌ | ✅ |
-| **Gas cost** | Lower | Slightly higher |
-| **Potential output** | Good | Better |
-| **Complexity** | Simple | Moderate |
-| **Use case** | Standard swaps | Optimized swaps |
+| Feature | DustSwapRouter (V2) | DustSwapRouterV2V3 (V2+V3) | DustSwapRouterX |
+|---------|-------------------|------------------------|-----------------|
+| **PancakeSwap V2** | ✅ | ✅ | ✅ |
+| **PancakeSwap V3** | ❌ | ✅ | ✅ |
+| **Output token** | BNB | BNB | ERC20 (e.g. USDT) |
+| **Output token updatable** | ❌ | ❌ | ✅ owner |
+| **Service fee** | None | Fixed 10% | Mutable 0–50% |
+| **Fee updatable** | ❌ | ❌ | ✅ owner |
+| **Manual routing** | ❌ | ✅ | ✅ |
+| **Gas cost** | Lower | Slightly higher | Slightly higher |
+| **Use case** | Simple swaps | BNB output | Production / revenue |
 
 ---
 
@@ -206,12 +211,23 @@ cd contracts
 npx hardhat run scripts/deployV2V3.js --network bscMainnet
 ```
 
+### Deploy RouterX (recommended)
+
+```bash
+cd contracts
+npx hardhat run scripts/deployRouterX.js --network bscMainnet
+```
+
 **Environment:**
 ```env
-# .env (same as V2)
 PRIVATE_KEY=your_key
 BSC_RPC_URL=https://bsc-dataseed.binance.org/
 BSCSCAN_API_KEY=your_api_key
+
+# RouterX-specific (all optional — defaults apply)
+FEE_RECIPIENT=0xYourFeeAddress       # defaults to deployer
+INITIAL_FEE_BPS=2000                 # 20% default, max 5000 (50%)
+OUTPUT_TOKEN=0x55d398326f99059fF775485246999027B3197955  # USDT default
 ```
 
 ---
@@ -347,9 +363,9 @@ Both contracts handle failures gracefully:
 
 ### Our Recommendation:
 
-**For most users: DustSwapRouterV2V3** 🎯
+**For production deployments: DustSwapRouterX** 🎯
 
-Why? The extra gas cost (~$0.08) is easily offset by better rates, especially for stablecoins and larger amounts. The automatic route selection means you always get the best price without thinking about it.
+Why? It gives full operator control — adjust the fee at any time (0–50%), change the output token without redeploying, and route via both V2 and V3 for best prices. Users receive a stable ERC20 (e.g. USDT) instead of volatile BNB.
 
 ---
 

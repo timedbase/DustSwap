@@ -6,15 +6,24 @@ DustSwap is a complete Web3 DApp that combines DexScreener + PancakeSwap to dete
 ## What We Built
 
 ### 1. Smart Contracts (Solidity + Hardhat)
-- **DustSwapRouter.sol**: Custom router with batch swap functionality
+- **DustSwapRouter.sol**: V2-only batch router, no fee
   - `batchSwapExactTokensForETH()`: Swap multiple tokens to BNB
   - `batchSwapExactTokensForTokens()`: Swap multiple tokens to a target token
   - `getEstimatedBNBOutputs()`: Calculate estimated outputs
-  - Security: ReentrancyGuard, Ownable, slippage protection, deadline checks
 
-- **Interfaces**: PancakeRouter02, IERC20
+- **DustSwapRouterV2V3.sol**: V2+V3 batch router, fixed 10% fee → BNB
+  - `batchSwapToBNB()`: Swap via best V2/V3 route, deduct 10% to fee recipient
+
+- **DustSwapRouterX.sol**: V2+V3 batch router, mutable fee → ERC20 *(recommended)*
+  - `batchSwapToToken()`: Swap dust tokens to configurable ERC20 output
+  - `setFee(bps)`: Owner updates fee (0–50%, default 20%)
+  - `setOutputToken(address)`: Owner changes ERC20 output token
+  - `setFeeRecipient(address)`: Owner updates fee recipient
+  - `getEstimatedOutputs()`: Off-chain quote helper
+
+- **Interfaces**: IPancakeRouter02 (V2 + FoT variants), IPancakeV3SwapRouter, IERC20
 - **Tests**: Comprehensive test suite
-- **Deployment**: Automated deployment script with contract verification
+- **Deployment**: Scripts for all three routers with auto BscScan verification
 - **Configuration**: BSC Mainnet + Testnet support
 
 ### 2. Frontend (React + Vite + TypeScript)
@@ -50,12 +59,16 @@ DustSwap is a complete Web3 DApp that combines DexScreener + PancakeSwap to dete
 DustSwap/
 ├── contracts/
 │   ├── contracts/
-│   │   ├── DustSwapRouter.sol           # Main router contract
+│   │   ├── DustSwapRouter.sol           # V2-only router
+│   │   ├── DustSwapRouterV2V3.sol       # V2+V3 router → BNB
+│   │   ├── DustSwapRouterX.sol          # V2+V3 router → ERC20, mutable fee
 │   │   └── interfaces/
 │   │       ├── IERC20.sol               # ERC20 interface
-│   │       └── IPancakeRouter02.sol     # PancakeSwap interface
+│   │       └── IPancakeRouter02.sol     # PancakeSwap V2 interface
 │   ├── scripts/
-│   │   └── deploy.js                    # Deployment script
+│   │   ├── deploy.js                    # Deploy V2-only router
+│   │   ├── deployV2V3.js               # Deploy V2+V3 router
+│   │   └── deployRouterX.js            # Deploy RouterX
 │   ├── test/
 │   │   └── DustSwapRouter.test.js       # Contract tests
 │   ├── hardhat.config.js                # Hardhat configuration

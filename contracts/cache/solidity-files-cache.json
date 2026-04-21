@@ -2,7 +2,7 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "/workspaces/DustSwap/contracts/contracts/DustSwapRouter.sol": {
-      "lastModificationDate": 1769432400511,
+      "lastModificationDate": 1776736241483,
       "contentHash": "f787ccdf08c3131dcc9715c4f8e3f385",
       "sourceName": "contracts/DustSwapRouter.sol",
       "solcConfig": {
@@ -81,8 +81,8 @@
       ]
     },
     "/workspaces/DustSwap/contracts/contracts/interfaces/IPancakeRouter02.sol": {
-      "lastModificationDate": 1769674781794,
-      "contentHash": "5b5ada6c9831929817ec67f6e5ab032b",
+      "lastModificationDate": 1776736789058,
+      "contentHash": "bd91c1824081ba3c9e47f7779c0c10bc",
       "sourceName": "contracts/interfaces/IPancakeRouter02.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -231,7 +231,7 @@
       ]
     },
     "/workspaces/DustSwap/contracts/contracts/DustSwapRouterV2V3.sol": {
-      "lastModificationDate": 1769674908838,
+      "lastModificationDate": 1776736241483,
       "contentHash": "730c620f5cad61a473dfda6d00696408",
       "sourceName": "contracts/DustSwapRouterV2V3.sol",
       "solcConfig": {
@@ -309,6 +309,49 @@
       "artifacts": [
         "IPancakeV3Quoter",
         "IPancakeV3SwapRouter"
+      ]
+    },
+    "/workspaces/DustSwap/contracts/contracts/DustSwapRouterX.sol": {
+      "lastModificationDate": 1776737023026,
+      "contentHash": "cd7727852b755e1f8aa108a46f5facec",
+      "sourceName": "contracts/DustSwapRouterX.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "viaIR": true,
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/access/Ownable.sol",
+        "@openzeppelin/contracts/utils/ReentrancyGuard.sol",
+        "./interfaces/IERC20.sol",
+        "./interfaces/IPancakeRouter02.sol",
+        "./interfaces/IPancakeV3SwapRouter.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "DustSwapRouterX"
       ]
     }
   }

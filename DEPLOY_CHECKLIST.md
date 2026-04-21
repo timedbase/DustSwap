@@ -5,10 +5,11 @@
 ### Smart Contract Status
 - [x] Contract compiles successfully
 - [x] Off-chain quoting implemented
-- [x] Token → BNB only (no token-to-token)
-- [x] 10% service fee implemented
-- [x] Fee recipient configurable
-- [x] Deployment script updated
+- [x] Token → ERC20 output (DustSwapRouterX)
+- [x] Mutable service fee (0–50%, default 20%, basis points)
+- [x] Fee recipient configurable (owner)
+- [x] Output token configurable (owner)
+- [x] Deployment script updated (`deployRouterX.js`)
 
 ### Frontend Status
 - [x] Off-chain quoting service created
@@ -33,9 +34,12 @@ Edit `.env`:
 ```env
 # REQUIRED
 PRIVATE_KEY=your_deployer_private_key_here
-FEE_RECIPIENT=0xYourFeeRecipientAddressHere  # ← Gets 10% fees
 
-# OPTIONAL (defaults provided)
+# OPTIONAL — RouterX defaults apply if omitted
+FEE_RECIPIENT=0xYourFeeRecipientAddressHere  # defaults to deployer
+INITIAL_FEE_BPS=2000                          # 20% default; max 5000 (50%)
+OUTPUT_TOKEN=0x55d398326f99059fF775485246999027B3197955  # USDT default
+
 BSC_RPC_URL=https://bsc-dataseed.binance.org/
 BSC_TESTNET_RPC_URL=https://data-seed-prebsc-1-s1.binance.org:8545/
 BSCSCAN_API_KEY=your_bscscan_api_key_here
@@ -45,7 +49,7 @@ BSCSCAN_API_KEY=your_bscscan_api_key_here
 
 ```bash
 # From /workspaces/DustSwap/contracts
-npx hardhat run scripts/deployV2V3.js --network bscTestnet
+npx hardhat run scripts/deployRouterX.js --network bscTestnet
 ```
 
 **Expected Output:**
@@ -166,8 +170,8 @@ Open: http://localhost:5173
 ```bash
 cd /workspaces/DustSwap/contracts
 
-# Deploy to mainnet
-npx hardhat run scripts/deployV2V3.js --network bscMainnet
+# Deploy RouterX to mainnet
+npx hardhat run scripts/deployRouterX.js --network bscMainnet
 ```
 
 Update frontend `.env`:
@@ -205,14 +209,16 @@ Deploy `dist/` folder to:
 ### Smart Contract Tests
 - [ ] Deploy succeeds
 - [ ] Fee recipient set correctly
-- [ ] Single token swap works
+- [ ] Output token set correctly
+- [ ] Single token swap works (V2)
+- [ ] Single token swap works (V3)
 - [ ] Batch swap (3+ tokens) works
-- [ ] 10% fee deducted correctly
-- [ ] Fee sent to recipient
-- [ ] User receives 90%
-- [ ] Failed swap returns tokens
-- [ ] V2 routing works
-- [ ] V3 routing works
+- [ ] Fee deducted correctly at configured rate
+- [ ] Fee sent to recipient in outputToken
+- [ ] User receives outputToken minus fee
+- [ ] `setFee()` works, rejects > 5000 bps
+- [ ] `setOutputToken()` works, rejects WBNB / zero address
+- [ ] Failed swap returns tokens to user
 - [ ] Emergency withdraw works (owner only)
 
 ### Frontend Tests
@@ -251,8 +257,11 @@ https://bscscan.com/address/0xYourContractAddress
 # Check fee recipient
 cast call 0xYourContractAddress "feeRecipient()" --rpc-url https://bsc-dataseed.binance.org/
 
-# Check service fee percentage (should be 10)
-cast call 0xYourContractAddress "SERVICE_FEE_PERCENT()" --rpc-url https://bsc-dataseed.binance.org/
+# Check current fee (basis points)
+cast call 0xYourContractAddress "serviceFee()" --rpc-url https://bsc-dataseed.binance.org/
+
+# Check output token
+cast call 0xYourContractAddress "outputToken()" --rpc-url https://bsc-dataseed.binance.org/
 ```
 
 ### Check Frontend

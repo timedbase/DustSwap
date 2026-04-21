@@ -17,9 +17,14 @@ A decentralized application that automatically detects and batch swaps dust toke
 DustSwap/
 ├── contracts/          # Smart contracts (Hardhat)
 │   ├── contracts/
-│   │   ├── DustSwapRouter.sol
+│   │   ├── DustSwapRouter.sol        # V2-only, no fee
+│   │   ├── DustSwapRouterV2V3.sol    # V2+V3, fixed 10% fee → BNB
+│   │   ├── DustSwapRouterX.sol       # V2+V3, mutable fee → ERC20
 │   │   └── interfaces/
 │   ├── scripts/
+│   │   ├── deploy.js
+│   │   ├── deployV2V3.js
+│   │   └── deployRouterX.js
 │   └── test/
 ├── frontend/           # React application (Vite)
 │   ├── src/
@@ -92,16 +97,23 @@ npx hardhat test
 ### 4. Deploy to BSC Testnet
 
 ```bash
+# V2-only (no fee)
 npx hardhat run scripts/deploy.js --network bscTestnet
+
+# V2+V3 fixed fee → BNB
+npx hardhat run scripts/deployV2V3.js --network bscTestnet
+
+# V2+V3 mutable fee → ERC20  (recommended)
+npx hardhat run scripts/deployRouterX.js --network bscTestnet
 ```
 
 ### 5. Deploy to BSC Mainnet
 
 ```bash
-npx hardhat run scripts/deploy.js --network bscMainnet
+npx hardhat run scripts/deployRouterX.js --network bscMainnet
 ```
 
-After deployment, copy the DustSwapRouter address and update your frontend `.env` file.
+After deployment, copy the contract address and update your frontend `.env` file.
 
 ## Frontend Setup
 
@@ -144,24 +156,34 @@ The built files will be in the `dist/` directory.
 
 ## Smart Contract Details
 
-### DustSwapRouter
+### DustSwapRouterX *(recommended)*
 
-**Address**: `<deployed-address>`
+**File:** `contracts/DustSwapRouterX.sol`
 
 **Key Functions:**
-- `batchSwapExactTokensForETH()`: Swap multiple tokens to BNB in one transaction
-- `batchSwapExactTokensForTokens()`: Swap multiple tokens to a target token
-- `getEstimatedBNBOutputs()`: Get estimated BNB output for multiple tokens
-- `emergencyWithdraw()`: Emergency function to withdraw stuck tokens
+- `batchSwapToToken(instructions, deadline)`: Batch swap dust tokens to `outputToken` (ERC20)
+- `getEstimatedOutputs(tokens, amounts)`: Off-chain quote helper via V2 path
+- `setFee(bps)`: Update service fee (owner only). Max 50% (5000 bps).
+- `setFeeRecipient(address)`: Update fee recipient (owner only)
+- `setOutputToken(address)`: Update the ERC20 output token (owner only)
+- `emergencyWithdraw(token, amount)`: Recover stuck tokens (owner only)
 
-**Events:**
-- `BatchSwapCompleted`: Emitted when a batch swap completes
-- `SingleSwapCompleted`: Emitted for each individual swap
-- `EmergencyWithdraw`: Emitted on emergency withdrawals
+**Fee:** Mutable, in basis points. Default 20% (2000 bps), max 50% (5000 bps).
+
+**Output:** Any ERC20 — defaults to USDT at deploy. Owner can change at any time.
+
+**Events:** `BatchSwapCompleted`, `SingleSwapCompleted`, `FeeUpdated`, `FeeRecipientUpdated`, `OutputTokenUpdated`
+
+---
+
+### DustSwapRouter / DustSwapRouterV2V3
+
+Legacy contracts. See [CONTRACTS_COMPARISON.md](./CONTRACTS_COMPARISON.md) for a full comparison.
 
 ### Integrations
 
 - **PancakeSwap Router V2**: `0x10ED43C718714eb63d5aA57B78B54704E256024E`
+- **PancakeSwap Router V3**: `0x1b81D678ffb9C0263b24A97847620C99d213eB14`
 - **DexScreener API**: `https://api.dexscreener.com`
 
 ## Security

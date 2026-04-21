@@ -5,9 +5,11 @@
 DustSwap is now **100% complete** with all requested features:
 
 ### Smart Contracts ✓
-- ✅ **DustSwapRouter.sol** - Custom router with batch swap functionality
-- ✅ **Batch swapping** - Swap multiple tokens to BNB in one transaction
-- ✅ **PancakeSwap integration** - Uses PancakeSwap Router V2
+- ✅ **DustSwapRouter.sol** - V2-only batch router, no fee
+- ✅ **DustSwapRouterV2V3.sol** - V2+V3 batch router, fixed 10% fee → BNB
+- ✅ **DustSwapRouterX.sol** - V2+V3 batch router, mutable fee (0–50%) → ERC20 *(recommended)*
+- ✅ **Batch swapping** - Swap multiple dust tokens in one transaction
+- ✅ **PancakeSwap V2 + V3 integration**
 - ✅ **Security features** - ReentrancyGuard, slippage protection, deadline checks
 - ✅ **Compiled successfully** - Ready for deployment
 
@@ -50,10 +52,10 @@ npx hardhat compile
 # Note: Tests require a valid BSC fork RPC URL
 npx hardhat test
 
-# Deploy to BSC Testnet
-npx hardhat run scripts/deploy.js --network bscTestnet
+# Deploy RouterX to BSC Testnet (recommended)
+npx hardhat run scripts/deployRouterX.js --network bscTestnet
 
-# Save the deployed DustSwapRouter address!
+# Save the deployed DustSwapRouterX address!
 ```
 
 ### Step 2: Set Up Frontend
@@ -137,8 +139,10 @@ DustSwap/
 ## 🎯 Key Files
 
 ### Smart Contract
-- **[DustSwapRouter.sol](./contracts/contracts/DustSwapRouter.sol)** - Batch swap logic
-- **[deploy.js](./contracts/scripts/deploy.js)** - Deployment script
+- **[DustSwapRouterX.sol](./contracts/contracts/DustSwapRouterX.sol)** - V2+V3, ERC20 output, mutable fee *(recommended)*
+- **[DustSwapRouterV2V3.sol](./contracts/contracts/DustSwapRouterV2V3.sol)** - V2+V3, fixed 10% fee → BNB
+- **[DustSwapRouter.sol](./contracts/contracts/DustSwapRouter.sol)** - V2-only, no fee
+- **[deployRouterX.js](./contracts/scripts/deployRouterX.js)** - RouterX deployment script
 - **[hardhat.config.js](./contracts/hardhat.config.js)** - Network config
 
 ### Frontend
