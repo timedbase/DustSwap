@@ -38,9 +38,6 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
     address public immutable WBNB;
 
     // ─── Self-Contained Permit2 ───────────────────────────────────────────────
-    // Implements the Uniswap Permit2 SignatureTransfer pattern internally.
-    // Users approve this contract once; subsequent transfers are authorised by
-    // off-chain EIP-712 signatures, eliminating per-token approve transactions.
 
     /// @notice EIP-712 domain separator for this contract's Permit2 scheme.
     bytes32 public immutable DOMAIN_SEPARATOR;
@@ -55,28 +52,27 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
         );
 
     /// @notice Unordered nonce bitmap: nonceBitmap[owner][wordPos] → 256-bit word.
-    /// @dev wordPos = nonce >> 8, bit index = nonce & 0xff. A set bit means the nonce is used.
     mapping(address => mapping(uint256 => uint256)) public nonceBitmap;
+
+    // ─── Timelock ─────────────────────────────────────────────────────────────
+
+    /// @notice Delay applied to all sensitive owner-controlled changes.
+    uint256 public constant TIMELOCK = 48 hours;
 
     // ─── Mutable State ────────────────────────────────────────────────────────
 
-    /// @notice ERC20 token that users receive after a dust swap.
     address public outputToken;
-
-    /// @notice Pending output token queued via proposeOutputToken (address(0) if none).
     address public pendingOutputToken;
-
-    /// @notice Timestamp after which pendingOutputToken can be applied.
     uint256 public pendingOutputTokenActiveAt;
 
-    /// @notice Minimum delay between proposing and applying an outputToken change.
-    uint256 public constant OUTPUT_TOKEN_TIMELOCK = 48 hours;
-
-    /// @notice Address that collects the service fee.
     address public feeRecipient;
+    address public pendingFeeRecipient;
+    uint256 public pendingFeeRecipientActiveAt;
 
     /// @notice Service fee in basis points (e.g. 2000 = 20%). Max 5000 (50%).
     uint256 public serviceFee;
+    uint256 public pendingFee;
+    uint256 public pendingFeeActiveAt;
 
     uint256 public constant MAX_FEE = 5000;
     uint256 public constant FEE_DENOMINATOR = 10000;
@@ -88,22 +84,15 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
     struct SwapInstruction {
         address token;
         uint256 amount;
-        /// @dev Minimum outputToken to receive for this single swap (slippage guard).
         uint256 minAmountOut;
         RouterVersion version;
-        /// @dev V3 pool fee tier: 100, 500, 2500, or 10000. Ignored for V2.
         uint24 v3Fee;
-        // ── Self-contained Permit2 (optional, highest priority) ─────────────
-        // Sign an EIP-712 PermitTransferFrom message off-chain. This contract
-        // verifies the signature and consumes the nonce, then calls transferFrom.
-        // Requires the user to have approved this contract via the standard approve().
-        // Set permit2Sig to empty bytes to skip.
+        // ── Self-contained Permit2 ──────────────────────────────────────────
         uint256 permit2Nonce;
         uint256 permit2Deadline; // 0 = use the swap deadline
         bytes   permit2Sig;
-        // ── EIP-2612 native permit (optional, used when permit2Sig is empty) ─
-        // Set permitDeadline = 0 to skip and rely on a pre-existing allowance.
-        uint256 permitDeadline;
+        // ── EIP-2612 native permit ──────────────────────────────────────────
+        uint256 permitDeadline;  // 0 = skip
         uint8   permitV;
         bytes32 permitR;
         bytes32 permitS;
@@ -119,7 +108,6 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
         uint256 userAmount,
         address indexed outputToken
     );
-
     event SingleSwapCompleted(
         address indexed user,
         address indexed token,
@@ -128,11 +116,18 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
         RouterVersion version
     );
 
+    event FeeProposed(uint256 newFee, uint256 activeAt);
+    event FeeProposalCancelled(uint256 cancelledFee);
     event FeeUpdated(uint256 oldFee, uint256 newFee);
+
+    event FeeRecipientProposed(address indexed newRecipient, uint256 activeAt);
+    event FeeRecipientProposalCancelled(address indexed cancelledRecipient);
     event FeeRecipientUpdated(address indexed oldRecipient, address indexed newRecipient);
+
     event OutputTokenProposed(address indexed newToken, uint256 activeAt);
     event OutputTokenProposalCancelled(address indexed cancelledToken);
     event OutputTokenUpdated(address indexed oldToken, address indexed newToken);
+
     event NonceInvalidation(address indexed owner, uint256 wordPos, uint256 mask);
 
     // ─── Errors ───────────────────────────────────────────────────────────────
@@ -147,19 +142,12 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
     error FeeTooHigh();
     error InsufficientOutput();
     error TimelockActive(uint256 activeAt);
-    error NoPendingOutputToken();
+    error NoPendingProposal();
     error InvalidNonce();
     error InvalidSignature();
 
     // ─── Constructor ──────────────────────────────────────────────────────────
 
-    /**
-     * @param _pancakeRouterV2 PancakeSwap Router V2 address
-     * @param _pancakeRouterV3 PancakeSwap Router V3 address
-     * @param _outputToken     ERC20 token users receive (e.g. USDT). Must not be WBNB.
-     * @param _feeRecipient    Address that collects the service fee
-     * @param _initialFee      Initial fee in basis points (e.g. 2000 = 20%)
-     */
     constructor(
         address _pancakeRouterV2,
         address _pancakeRouterV3,
@@ -194,56 +182,93 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
     // ─── Permit2 — Nonce Management ───────────────────────────────────────────
 
     /**
-     * @notice Invalidate specific nonces so they can never be used in a Permit2 signature.
-     * @dev    Callers can burn nonces they no longer wish to be valid.
-     *         wordPos = nonce >> 8; mask = 1 << (nonce & 0xff).
-     * @param wordPos  Word position in the bitmap.
-     * @param mask     Bitmask of nonces to invalidate within that word.
+     * @notice Invalidate nonces so they can never be used in a Permit2 signature.
+     * @param wordPos  Word position in the bitmap (nonce >> 8).
+     * @param mask     Bitmask of nonce bits to invalidate.
      */
     function invalidateNonces(uint256 wordPos, uint256 mask) external {
         nonceBitmap[msg.sender][wordPos] |= mask;
         emit NonceInvalidation(msg.sender, wordPos, mask);
     }
 
-    // ─── Owner Configuration ──────────────────────────────────────────────────
+    // ─── Owner Configuration — Fee ────────────────────────────────────────────
 
     /**
-     * @notice Update the service fee.
+     * @notice Queue a service fee change. Takes effect after TIMELOCK (48 h).
      * @param _newFee New fee in basis points. Cannot exceed MAX_FEE (50%).
      */
-    function setFee(uint256 _newFee) external onlyOwner {
+    function proposeFee(uint256 _newFee) external onlyOwner {
         if (_newFee > MAX_FEE) revert FeeTooHigh();
-        emit FeeUpdated(serviceFee, _newFee);
-        serviceFee = _newFee;
+        pendingFee = _newFee;
+        pendingFeeActiveAt = block.timestamp + TIMELOCK;
+        emit FeeProposed(_newFee, pendingFeeActiveAt);
     }
 
+    /// @notice Apply a queued fee change once the timelock has elapsed.
+    function applyFee() external onlyOwner {
+        if (pendingFeeActiveAt == 0) revert NoPendingProposal();
+        if (block.timestamp < pendingFeeActiveAt) revert TimelockActive(pendingFeeActiveAt);
+        emit FeeUpdated(serviceFee, pendingFee);
+        serviceFee = pendingFee;
+        pendingFee = 0;
+        pendingFeeActiveAt = 0;
+    }
+
+    /// @notice Cancel a pending fee proposal.
+    function cancelFee() external onlyOwner {
+        if (pendingFeeActiveAt == 0) revert NoPendingProposal();
+        emit FeeProposalCancelled(pendingFee);
+        pendingFee = 0;
+        pendingFeeActiveAt = 0;
+    }
+
+    // ─── Owner Configuration — Fee Recipient ─────────────────────────────────
+
     /**
-     * @notice Update the fee recipient.
+     * @notice Queue a fee recipient change. Takes effect after TIMELOCK (48 h).
      * @param _newRecipient New address to receive fees.
      */
-    function setFeeRecipient(address _newRecipient) external onlyOwner {
+    function proposeFeeRecipient(address _newRecipient) external onlyOwner {
         if (_newRecipient == address(0)) revert InvalidFeeRecipient();
-        emit FeeRecipientUpdated(feeRecipient, _newRecipient);
-        feeRecipient = _newRecipient;
+        pendingFeeRecipient = _newRecipient;
+        pendingFeeRecipientActiveAt = block.timestamp + TIMELOCK;
+        emit FeeRecipientProposed(_newRecipient, pendingFeeRecipientActiveAt);
     }
 
+    /// @notice Apply a queued fee recipient change once the timelock has elapsed.
+    function applyFeeRecipient() external onlyOwner {
+        if (pendingFeeRecipientActiveAt == 0) revert NoPendingProposal();
+        if (block.timestamp < pendingFeeRecipientActiveAt) revert TimelockActive(pendingFeeRecipientActiveAt);
+        emit FeeRecipientUpdated(feeRecipient, pendingFeeRecipient);
+        feeRecipient = pendingFeeRecipient;
+        pendingFeeRecipient = address(0);
+        pendingFeeRecipientActiveAt = 0;
+    }
+
+    /// @notice Cancel a pending fee recipient proposal.
+    function cancelFeeRecipient() external onlyOwner {
+        if (pendingFeeRecipientActiveAt == 0) revert NoPendingProposal();
+        emit FeeRecipientProposalCancelled(pendingFeeRecipient);
+        pendingFeeRecipient = address(0);
+        pendingFeeRecipientActiveAt = 0;
+    }
+
+    // ─── Owner Configuration — Output Token ──────────────────────────────────
+
     /**
-     * @notice Queue an outputToken change. Takes effect after OUTPUT_TOKEN_TIMELOCK (48 h).
-     *         Emits OutputTokenProposed so users can see the change coming and act accordingly.
+     * @notice Queue an outputToken change. Takes effect after TIMELOCK (48 h).
      * @param _newToken New output token address. Must not be zero or WBNB.
      */
     function proposeOutputToken(address _newToken) external onlyOwner {
         if (_newToken == address(0) || _newToken == WBNB) revert InvalidOutputToken();
         pendingOutputToken = _newToken;
-        pendingOutputTokenActiveAt = block.timestamp + OUTPUT_TOKEN_TIMELOCK;
+        pendingOutputTokenActiveAt = block.timestamp + TIMELOCK;
         emit OutputTokenProposed(_newToken, pendingOutputTokenActiveAt);
     }
 
-    /**
-     * @notice Apply a previously proposed outputToken change once the timelock has elapsed.
-     */
+    /// @notice Apply a queued outputToken change once the timelock has elapsed.
     function applyOutputToken() external onlyOwner {
-        if (pendingOutputToken == address(0)) revert NoPendingOutputToken();
+        if (pendingOutputToken == address(0)) revert NoPendingProposal();
         if (block.timestamp < pendingOutputTokenActiveAt) revert TimelockActive(pendingOutputTokenActiveAt);
         address old = outputToken;
         outputToken = pendingOutputToken;
@@ -252,11 +277,9 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
         emit OutputTokenUpdated(old, outputToken);
     }
 
-    /**
-     * @notice Cancel a pending outputToken proposal before it is applied.
-     */
+    /// @notice Cancel a pending outputToken proposal.
     function cancelOutputToken() external onlyOwner {
-        if (pendingOutputToken == address(0)) revert NoPendingOutputToken();
+        if (pendingOutputToken == address(0)) revert NoPendingProposal();
         emit OutputTokenProposalCancelled(pendingOutputToken);
         pendingOutputToken = address(0);
         pendingOutputTokenActiveAt = 0;
@@ -266,10 +289,6 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
 
     /**
      * @notice Batch swap multiple dust tokens into `outputToken`.
-     *
-     * Per-swap failures are silently skipped and the token is returned to the
-     * caller — consistent with DustSwapRouterV2V3 behaviour.
-     *
      * @param instructions  Array of swap instructions.
      * @param deadline      Unix timestamp; reverts if exceeded.
      * @return userAmount   Amount of outputToken sent to the caller after fee deduction.
@@ -281,7 +300,7 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
         if (block.timestamp > deadline) revert DeadlineExpired();
         if (instructions.length == 0) revert EmptySwapList();
 
-        address _outputToken = outputToken; // cache SLOAD
+        address _outputToken = outputToken;
         uint256 initialBalance = IERC20(_outputToken).balanceOf(address(this));
         uint256 tokensSwapped;
 
@@ -293,7 +312,6 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
             }
             if (inst.amount == 0) continue;
 
-            // Delegate transfer + swap to helper to keep this frame's stack shallow.
             if (_executeSwap(inst, _outputToken, deadline) > 0) tokensSwapped++;
         }
 
@@ -313,11 +331,6 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
 
     // ─── Internal Swap Helpers ────────────────────────────────────────────────
 
-    /**
-     * @dev Pull tokens from the caller, measure actual received, route to V2 or V3,
-     *      emit SingleSwapCompleted, and return amountOut.
-     *      Extracted to keep batchSwapToToken's stack frame shallow.
-     */
     function _executeSwap(
         SwapInstruction calldata inst,
         address _outputToken,
@@ -327,21 +340,19 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
         uint256 balBefore = token.balanceOf(address(this));
 
         if (inst.permit2Sig.length > 0) {
-            // ── Priority 1: Self-contained Permit2 ─────────────────────────
-            // Verify EIP-712 signature and consume the nonce, then transferFrom.
+            // Priority 1: Self-contained Permit2
             uint256 p2Deadline = inst.permit2Deadline != 0 ? inst.permit2Deadline : deadline;
             _verifyAndConsumePermit(inst.token, inst.amount, inst.permit2Nonce, p2Deadline, msg.sender, inst.permit2Sig);
             if (!token.transferFrom(msg.sender, address(this), inst.amount)) revert TransferFailed();
         } else {
-            // ── Priority 2: EIP-2612 native permit ──────────────────────────
-            // Silently ignored if the token doesn't support it; falls through to transferFrom.
+            // Priority 2: EIP-2612 native permit (silently skipped if unsupported)
             if (inst.permitDeadline != 0) {
                 try IERC20Permit(inst.token).permit(
                     msg.sender, address(this), inst.amount,
                     inst.permitDeadline, inst.permitV, inst.permitR, inst.permitS
                 ) {} catch {}
             }
-            // ── Priority 3: standard pre-approved allowance ─────────────────
+            // Priority 3: standard pre-approved allowance
             if (!token.transferFrom(msg.sender, address(this), inst.amount)) revert TransferFailed();
         }
 
@@ -358,11 +369,6 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
         }
     }
 
-    /**
-     * @dev Verify a Permit2 EIP-712 signature and consume the nonce.
-     *      Reverts with InvalidNonce if the nonce is already used.
-     *      Reverts with InvalidSignature if the signature does not match.
-     */
     function _verifyAndConsumePermit(
         address token,
         uint256 amount,
@@ -387,22 +393,16 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
         if (recovered != owner) revert InvalidSignature();
     }
 
-    /**
-     * @dev Mark a nonce as used. Reverts with InvalidNonce if already consumed.
-     */
     function _useUnorderedNonce(address owner, uint256 nonce) internal {
         uint256 wordPos = nonce >> 8;
-        uint256 bitPos  = nonce & 0xff;
-        uint256 bit     = 1 << bitPos;
+        uint256 bit     = 1 << (nonce & 0xff);
         uint256 flipped = nonceBitmap[owner][wordPos] ^= bit;
-        // After XOR the bit must be SET (1), meaning it was 0 before.
         if (flipped & bit == 0) revert InvalidNonce();
     }
 
     /**
      * @dev V2 path: tokenIn → WBNB → outputToken.
-     *      Uses SupportingFeeOnTransferTokens variant to handle tax tokens correctly.
-     *      On failure: returns tokenIn to the caller, received = 0.
+     *      On failure: returns tokenIn to the caller.
      */
     function _swapV2ToOutputToken(
         IERC20 token,
@@ -425,16 +425,15 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
         ) {
             received = IERC20(_outputToken).balanceOf(address(this)) - before;
         } catch {
-            // Swap failed — return dust tokens to the user.
             token.transfer(msg.sender, amount);
             received = 0;
         }
     }
 
     /**
-     * @dev V3 path: tokenIn → WBNB (V3 exactInputSingle) → outputToken (V2).
-     *      Step 1 failure: returns tokenIn to the caller.
-     *      Step 2 failure: WBNB remains in the contract; recoverable via emergencyWithdraw.
+     * @dev V3 path: tokenIn → WBNB (V3) → outputToken (V2).
+     *      Step 1 failure: returns tokenIn to caller.
+     *      Step 2 failure: returns WBNB to caller (no stranding).
      */
     function _swapV3ToOutputToken(
         IERC20 token,
@@ -446,7 +445,6 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
     ) internal returns (uint256 received) {
         token.approve(address(pancakeRouterV3), amount);
 
-        // Step 1: tokenIn → WBNB via V3
         try pancakeRouterV3.exactInputSingle(
             IPancakeV3SwapRouter.ExactInputSingleParams({
                 tokenIn:           address(token),
@@ -454,13 +452,12 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
                 fee:               v3Fee,
                 recipient:         address(this),
                 amountIn:          amount,
-                amountOutMinimum:  0,   // floor applied at final outputToken step
+                amountOutMinimum:  0,
                 sqrtPriceLimitX96: 0
             })
         ) returns (uint256 wbnbAmount) {
             if (wbnbAmount == 0) return 0;
 
-            // Step 2: WBNB → outputToken via V2 (typically deeper liquidity)
             IERC20(WBNB).approve(address(pancakeRouterV2), wbnbAmount);
 
             address[] memory path = new address[](2);
@@ -474,11 +471,11 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
             ) {
                 received = IERC20(_outputToken).balanceOf(address(this)) - before;
             } catch {
-                // WBNB is now held by this contract; owner can recover via emergencyWithdraw.
+                // Return WBNB directly to the caller — no funds are stranded.
+                IERC20(WBNB).transfer(msg.sender, wbnbAmount);
                 received = 0;
             }
         } catch {
-            // V3 step failed before any state change — safely return tokens.
             token.transfer(msg.sender, amount);
             received = 0;
         }
@@ -488,8 +485,7 @@ contract DustSwapRouterX is Ownable, ReentrancyGuard {
 
     /**
      * @notice Estimate outputToken received for a list of tokens/amounts via V2.
-     * @dev Uses V2 getAmountsOut with path [token, WBNB, outputToken].
-     *      Returns 0 for tokens with no V2 liquidity — use as off-chain hint only.
+     * @dev Returns 0 for tokens with no V2 liquidity — use as off-chain hint only.
      */
     function getEstimatedOutputs(
         address[] calldata tokens,
